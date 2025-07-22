@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 import sys
 
 load_dotenv()
@@ -15,12 +16,14 @@ def main():
         exit(1)
     else:
         user_prompt = cli_arguements[1]
+        messages = [
+            types.Content(role='user', parts=[types.Part(text=user_prompt)])
+        ]
         print("Hello from aiagent!")
         print(f'The prompt entered is {user_prompt}')
-        exit()
         ai_response = client.models.generate_content(model=FREE_TEIR_MODEL,
-                                                    contents='Why is Boot.dev such a great place to learn backend development? Use one paragraph maximum.')
-        print(f'The ai agent says::::\n {ai_response.text}')
+                                                    contents=messages)
+        print(f'The ai agent says::::\n{ai_response.text}')
         print(f'Prompt tokens: {ai_response.usage_metadata.prompt_token_count}')
         print(f'Response tokens: {ai_response.usage_metadata.candidates_token_count}')
 
