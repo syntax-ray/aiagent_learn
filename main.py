@@ -24,7 +24,9 @@ When a user asks a question or makes a request, make a function call plan. You c
 - Write or overwrite files
 
 All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
+When asked a question be sure to scan the current diretory files incase the user is asking about how something there works.
 """
+MAX_AGENT_ITERS = 20
 available_functions = types.Tool(
     function_declarations=[
         schema_get_files_info,
@@ -68,8 +70,6 @@ def call_function(function_call_part, verbose=False):
     )
     
 
-
-
 def main():
     verbose = False
     if len(cli_arguements) == 1:
@@ -86,23 +86,41 @@ def main():
         print("Hello from aiagent!")
         if verbose:
             print(f'The prompt entered is:::: {user_prompt}')
-        ai_response = client.models.generate_content(model=FREE_TEIR_MODEL,
-                                                    contents=messages,
-                                                    config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, tools=[available_functions])
-                                                    )
-        print(f'The ai agent says:::: {ai_response.text}')
-        if verbose:
-            if ai_response.function_calls:
-                for call in ai_response.function_calls:
-                    print(f"Calling function: {call.name}({call.args})")
-                    function_call_result = call_function(call)
-                    if not function_call_result.parts[0].function_response.response:
-                        raise Exception(f'Function {call.name} was called but it did not return anything')
-                    else:
-                        print(f"-> {function_call_result.parts[0].function_response.response}")
-            print(f'Prompt tokens: {ai_response.usage_metadata.prompt_token_count}')
-            print(f'Response tokens: {ai_response.usage_metadata.candidates_token_count}')
-
+        agent_iters = 0
+        while agent_iters < MAX_AGENT_ITERS: 
+            try:
+                ai_response = client.models.generate_content(model=FREE_TEIR_MODEL,
+                                                            contents=messages,
+                                                            config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, tools=[available_functions])
+                                                            )
+            
+                for candidate in ai_response.candidates:
+                    messages.append(types.Content(role=candidate.content.role, parts=candidate.content.parts))
+                if ai_response.text:
+                    print(f'The ai agent says:::: {ai_response.text}')
+                    if verbose:
+                        print(f'Prompt tokens: {ai_response.usage_metadata.prompt_token_count}')
+                        print(f'Response tokens: {ai_response.usage_metadata.candidates_token_count}')
+                        continue_iter = input('should ai continue?')
+                        if continue_iter == "N" or continue_iter == 'n':
+                            break
+                if verbose:
+                    if ai_response.function_calls:
+                        for call in ai_response.function_calls:
+                            print(f"Calling function: {call.name}({call.args})")
+                            function_call_result = call_function(call)
+                            if not function_call_result.parts[0].function_response.response:
+                                raise Exception(f'Function {call.name} was called but it did not return anything')
+                            else:
+                                print(f"-> {function_call_result.parts[0].function_response.response}")
+                                messages.append(types.Content(role='model', 
+                                                              parts=[types.Part(text=function_call_result.parts[0].function_response.response['result'])]))
+                    print(f'Prompt tokens: {ai_response.usage_metadata.prompt_token_count}')
+                    print(f'Response tokens: {ai_response.usage_metadata.candidates_token_count}')
+                agent_iters += 1   
+                # print(f'Current iteration is {agent_iters}') 
+            except Exception as e:
+                print(f'Error while fetching response from ai: {e}')
 
 if __name__ == "__main__":
     main()
